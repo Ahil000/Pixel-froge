@@ -9,141 +9,183 @@ WIDTH, HEIGHT = 600, 800
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Chest Coin Catcher")
 
-# Last bilder
+# Bilder
 bg = pygame.image.load("bg1.jpg")
 bg = pygame.transform.scale(bg, (WIDTH, HEIGHT))
 
 coin_img = pygame.image.load("2d gold coin.png")
 bomb_img = pygame.image.load("2d bombe.png")
 chest_img = pygame.image.load("chest.jpg")
+logo_img = pygame.image.load("logo 1.png")
 
-# Skalering
 coin_img = pygame.transform.scale(coin_img, (50, 50))
 bomb_img = pygame.transform.scale(bomb_img, (50, 50))
+logo_img = pygame.transform.scale(logo_img, (50, 50))
 chest_img = pygame.transform.scale(chest_img, (100, 80))
 
-# Spiller
-player_x = WIDTH // 2
-player_y = HEIGHT - 120
-player_speed = 7
+# Chest
+chest = pygame.Rect(WIDTH//2, HEIGHT-100, 100, 80)
+speed = 7
 
 # Objekter
-coins = []
-bombs = []
+objects = []
 
-# Poeng
+# Score
 score = 0
-font = pygame.font.SysFont(None, 40)
+
+# Fonts
+score_font = pygame.font.SysFont(None, 40)
+highscore_font = pygame.font.SysFont(None, 50)
+gameover_font = pygame.font.SysFont(None, 60)
 
 # Highscore
-HS_FILE = "highscore.txt"
+HIGHSCORE_FILE = "highscore.txt"
 
 def load_highscore():
-    if os.path.exists(HS_FILE):
-        with open(HS_FILE, "r") as f:
+    if os.path.exists(HIGHSCORE_FILE):
+        with open(HIGHSCORE_FILE, "r") as f:
             return int(f.read())
     return 0
 
-def save_highscore(hs):
-    with open(HS_FILE, "w") as f:
-        f.write(str(hs))
+def save_highscore(score):
+    with open(HIGHSCORE_FILE, "w") as f:
+        f.write(str(score))
 
 highscore = load_highscore()
 
-# Klokke
-clock = pygame.time.Clock()
+# Outline tekst
+def draw_text_with_outline(text, font, color, outline_color, center_pos):
+    base = font.render(text, True, color)
+    outline = font.render(text, True, outline_color)
 
+    rect = base.get_rect(center=center_pos)
+
+    for dx in [-2, 2]:
+        for dy in [-2, 2]:
+            screen.blit(outline, (rect.x + dx, rect.y + dy))
+
+    screen.blit(base, rect)
+
+clock = pygame.time.Clock()
 running = True
 game_over = False
-new_high = False
+new_highscore = False
+
+# Spawn system
+SPAWN_EVENT = pygame.USEREVENT + 1
+pygame.time.set_timer(SPAWN_EVENT, 800)
 
 while running:
     clock.tick(60)
-    screen.blit(bg, (0, 0))
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
+        if event.type == SPAWN_EVENT and not game_over:
+            x = random.randint(0, WIDTH - 50)
+
+            r = random.random()
+            if r < 0.3:
+                objects.append({"rect": pygame.Rect(x, 0, 50, 50), "type": "logo"})
+            elif r < 0.7:
+                objects.append({"rect": pygame.Rect(x, 0, 50, 50), "type": "coin"})
+            else:
+                objects.append({"rect": pygame.Rect(x, 0, 50, 50), "type": "bomb"})
+
+        if game_over and event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_r:
+                score = 0
+                objects.clear()
+                game_over = False
+                new_highscore = False
+
+    keys = pygame.key.get_pressed()
     if not game_over:
-# Input
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
-            player_x -= player_speed
-        if keys[pygame.K_RIGHT]:
-            player_x += player_speed
+        if keys[pygame.K_LEFT] and chest.x > 0:
+            chest.x -= speed
+        if keys[pygame.K_RIGHT] and chest.x < WIDTH - chest.width:
+            chest.x += speed
 
-        player_x = max(0, min(WIDTH - 100, player_x))
+# Oppdater objekter
+    for obj in objects[:]:
+        obj["rect"].y += 5
 
-# Spawn coins
-        if random.randint(1, 30) == 1:
-            coins.append([random.randint(0, WIDTH - 50), 0])
-
-        # Spawn bomber
-        if random.randint(1, 60) == 1:
-            bombs.append([random.randint(0, WIDTH - 50), 0])
-
-        # Coins
-        for coin in coins[:]:
-            coin[1] += 5
-            screen.blit(coin_img, coin)
-
-            if player_y < coin[1] + 50 and player_x < coin[0] + 50 and player_x + 100 > coin[0]:
-                coins.remove(coin)
+        if obj["rect"].colliderect(chest):
+            if obj["type"] == "coin":
                 score += 1
-
-            elif coin[1] > HEIGHT:
-                coins.remove(coin)
-
-# Bomber
-        for bomb in bombs[:]:
-            bomb[1] += 6
-            screen.blit(bomb_img, bomb)
-
-            if player_y < bomb[1] + 50 and player_x < bomb[0] + 50 and player_x + 100 > bomb[0]:
+            elif obj["type"] == "logo":
+                score += 10
+            elif obj["type"] == "bomb":
                 game_over = True
+                if score > highscore:
+                    highscore = score
+                    save_highscore(score)
+                    new_highscore = True
+            objects.remove(obj)
 
-            elif bomb[1] > HEIGHT:
-                bombs.remove(bomb)
+        elif obj["rect"].y > HEIGHT:
+            objects.remove(obj)
 
-# Tegn spiller
-        screen.blit(chest_img, (player_x, player_y))
+# Tegn bakgrunn
+    screen.blit(bg, (0, 0))
 
-# Tekst midt topp 
-        score_text = font.render(f"Score: {score}", True, (255, 255, 255))
-        hs_text = font.render(f"High Score: {highscore}", True, (255, 255, 0))
+# Tegn objekter
+    for obj in objects:
+        if obj["type"] == "coin":
+            screen.blit(coin_img, obj["rect"])
+        elif obj["type"] == "bomb":
+            screen.blit(bomb_img, obj["rect"])
+        elif obj["type"] == "logo":
+            screen.blit(logo_img, obj["rect"])
 
-        score_rect = score_text.get_rect(center=(WIDTH // 2, 20))
-        hs_rect = hs_text.get_rect(center=(WIDTH // 2, 60))
+# Tegn chest
+    screen.blit(chest_img, chest)
 
-        screen.blit(score_text, score_rect)
-        screen.blit(hs_text, hs_rect)
+# Mindre og ryddigere UI
+    draw_text_with_outline(
+        f"Score: {score}",
+        score_font,
+        (255, 255, 255),
+        (0, 0, 0),
+        (WIDTH // 2, 40)
+    )
 
-    else:
-# Highscore sjekk
-        if score > highscore:
-            highscore = score
-            save_highscore(highscore)
-            new_high = True
+    draw_text_with_outline(
+        f"High Score: {highscore}",
+        highscore_font,
+        (255, 255, 0),
+        (0, 0, 0),
+        (WIDTH // 2, 85)
+    )
 
-# Tekst midt topp 
-        game_over_text = font.render("GAME OVER", True, (255, 0, 0))
-        score_text = font.render(f"Score: {score}", True, (255, 255, 255))
-        hs_text = font.render(f"High Score: {highscore}", True, (255, 255, 0))
+# Game Over
+    if game_over:
+        draw_text_with_outline(
+            "GAME OVER",
+            gameover_font,
+            (255, 0, 0),
+            (0, 0, 0),
+            (WIDTH // 2, HEIGHT // 2 - 40)
+        )
 
-        go_rect = game_over_text.get_rect(center=(WIDTH // 2, 20))
-        score_rect = score_text.get_rect(center=(WIDTH // 2, 60))
-        hs_rect = hs_text.get_rect(center=(WIDTH // 2, 100))
+        if new_highscore:
+            draw_text_with_outline(
+                "NEW HIGH SCORE!",
+                score_font,
+                (0, 255, 0),
+                (0, 0, 0),
+                (WIDTH // 2, HEIGHT // 2 + 20)
+            )
 
-        screen.blit(game_over_text, go_rect)
-        screen.blit(score_text, score_rect)
-        screen.blit(hs_text, hs_rect)
+        draw_text_with_outline(
+            "Press R to restart",
+            score_font,
+            (255, 255, 255),
+            (0, 0, 0),
+            (WIDTH // 2, HEIGHT // 2 + 80)
+        )
 
-        if new_high:
-            nh_text = font.render("NEW HIGH SCORE!", True, (0, 255, 0))
-            nh_rect = nh_text.get_rect(center=(WIDTH // 2, 140))
-            screen.blit(nh_text, nh_rect)
-
-    pygame.display.update()
+    pygame.display.flip()
 
 pygame.quit()
